@@ -84,7 +84,7 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
 
         # Event separator default value needs to be set.
         # We repurpose "run_config" of EventParser to hold this attribute.
-        self._run_config['event_separator'] = 'eventID'
+        self._run_config['event_separator'] = 'event_id'
         # Apply run config modification if requested
         run_config_mod = cfg_dict.get('ParserRunConfig',None)
         if run_config_mod:
@@ -150,7 +150,7 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
         
         # 1. Loop over trajectories, create one supera::ParticleInput for each
         #    store particle inputs in list to fill parent information later
-        max_trackid = max(data.trajectories['trackID'].max(),data.segments['trackID'].max())
+        max_trackid = max(data.trajectories['traj_id'].max(),data.segments['traj_id'].max())
         self._trackid2idx.resize(int(max_trackid+1),supera.kINVALID_INDEX)
         for traj in data.trajectories:
             # print("traj",traj)
@@ -166,10 +166,10 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
                     print('  TrackID',part_input.part.trackid,
                           'PDG',part_input.part.pdg,
                           'Energy',part_input.part.energy_init)
-            if traj['trackID'] < 0:
-                print('Negative track ID found',traj['trackID'])
+            if traj['traj_id'] < 0:
+                print('Negative track ID found',traj['traj_id'])
                 raise ValueError
-            self._trackid2idx[int(traj['trackID'])] = part_input.part.id
+            self._trackid2idx[int(traj['traj_id'])] = part_input.part.id
             supera_event.push_back(part_input)
             
         if verbose:
@@ -295,7 +295,7 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
             seg_flag[:] = True
             seg_dist[:] = 1.e9
 
-            # Step 1. Compute the distance and reject some segments (see above comments for details)
+            # Step 1. Compute the distance and reject some segments (see above comments for details)'
             for it in range(packet_segments.shape[0]):
                 seg_idx = packet_segments[it]
                 if seg_idx == -1: 
@@ -324,112 +324,124 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
                 seg_dist[it] = poca_pt.distance(packet_pt)
                 edep.x, edep.y, edep.z = packet_pt.x, packet_pt.y, packet_pt.z
                 edep.dedx = seg['dEdx']
+                edep.e = dE[ip]*packet_fractions[it]
                 packet_edeps[it] = edep
+                supera_event[self._trackid2idx[int(seg['traj_id'])]].pcloud.push_back(packet_edeps[it])
 
             if verbose:
                 print('[INFO] Assessing packet',ip)
                 print('       Segments :', packet_segments)
-                print('       TrackIDs :', [data.segments[packet_segments[idx]]['trackID'] for idx in range(packet_segments.shape[0])])
+                print('       TrackIDs :', [data.segments[packet_segments[idx]]['segment_id'] for idx in range(packet_segments.shape[0])])
                 print('       Fractions:', ['%.3f' % f for f in packet_fractions])
                 print('       Energy   : %.3f' % dE[ip])
                 print('       Position :', ['%.3f' % f for f in [x[ip]*self._mm2cm,y[ip]*self._mm2cm,z[ip]*self._mm2cm]])
                 print('       Distance :', ['%.3f' % f for f in seg_dist])
 
-            # Post-Step1, check if there is any associated segments left.
-            # Post-Step1.A: If none left, then register to the set of unassociated segments.
-            if (seg_dist < self._ass_distance_limit).sum()<1:
-                if verbose:
-                    print('[WARNING] found a packet unassociated with any tracks')
-                    print('          Packet %d Charge %.3f' % (ip,dE[ip]))
-                edep = supera.EDep()
-                edep.x,edep.y,edep.z,edep.e = x[ip]*self._mm2cm, y[ip]*self._mm2cm, z[ip]*self._mm2cm, dE[ip]
-                self._edeps_unassociated.push_back(edep)
-                if not self._log is None:
-                    self._log['packet_noass'][-1] += 1
-                check_ana_sum += edep.e
-                continue
+            ### Post-Step1, check if there is any associated segments left.
+            ### Post-Step1.A: If none left, then register to the set of unassociated segments.
+            ##print("seg_dist: ", seg_dist)
+            ##print("self._ass_distance_limit: ", self._ass_distance_limit)
+            ##print("(seg_dist < self._ass_distance_limit).sum(): ", (seg_dist < self._ass_distance_limit).sum())
+            ##print("(seg_dist < self._ass_distance_limit): ", (seg_dist < self._ass_distance_limit))
+            ##if (seg_dist < self._ass_distance_limit).sum()<1:
+            ##    if verbose:
+            ##        print('[WARNING] found a packet unassociated with any tracks')
+            ##        print('          Packet %d Charge %.3f' % (ip,dE[ip]))
+            ##    print('[WARNING] found a packet unassociated with any tracks')
+            ##    print('          Packet %d Charge %.3f' % (ip,dE[ip]))
+            ##    edep = supera.EDep()
+            ##    edep.x,edep.y,edep.z,edep.e = x[ip]*self._mm2cm, y[ip]*self._mm2cm, z[ip]*self._mm2cm, dE[ip]
+            ##    self._edeps_unassociated.push_back(edep)
+            ##    if not self._log is None:
+            ##        self._log['packet_noass'][-1] += 1
+            ##    check_ana_sum += edep.e
+            ##    continue
 
-            # After this point, >=1 association will be found. Log if needed
-            if not self._log is None:
-                self._log['ass_frac'][-1] += 1
+            ### After this point, >=1 association will be found. Log if needed
+            ##if not self._log is None:
+            ##    self._log['ass_frac'][-1] += 1
 
-            # Post-Step1.B: If only one segment left, register to that packet.
-            if (seg_dist < self._ass_distance_limit).sum()==1:
-                if verbose:
-                    print('[INFO] Registering the only segment within distance limit',packet_segments[it])
-                it = np.argmin(seg_dist)
-                seg_idx = packet_segments[it]
-                seg = data.segments[seg_idx]
-                packet_edeps[it].dedx = seg['dEdx']
-                packet_edeps[it].e = dE[ip]
-                supera_event[self._trackid2idx[int(seg['trackID'])]].pcloud.push_back(packet_edeps[it])
-                check_ana_sum += packet_edeps[it].e
-                continue
+            ### Post-Step1.B: If only one segment left, register the corresponding trajectory to that packet.
+            ##if (seg_dist < self._ass_distance_limit).sum()==1:
+            ##    if verbose:
+            ##        print('[INFO] Registering the only segment within distance limit',packet_segments[it])
+            ##    it = np.argmin(seg_dist)
+            ##    seg_idx = packet_segments[it]
+            ##    seg = data.segments[seg_idx]
+            ##    packet_edeps[it].dedx = seg['dEdx']
+            ##    packet_edeps[it].e = dE[ip]
+            ##    supera_event[self._trackid2idx[int(seg['traj_id'])]].pcloud.push_back(packet_edeps[it])
+            ##    check_ana_sum += packet_edeps[it].e
+            ##    continue
 
-            # Check (and log if needed) if the number of associations is saturated 
-            if not -1 in packet_segments:
-                if verbose:
-                    print('[WARNING] found',len(packet_segments),'associated track IDs maxing out the recording array size')
-                if not self._log is None:
-                    self._log['ass_saturation'][-1] += 1
+            ### Check (and log if needed) if the number of associations is saturated 
+            ##if not -1 in packet_segments:
+            ##    if verbose:
+            ##        print('[WARNING] found',len(packet_segments),'associated track IDs maxing out the recording array size')
+            ##    if not self._log is None:
+            ##        self._log['ass_saturation'][-1] += 1
 
-            # Step 2. Claculate the fraction min threshold and ignore segments with a fraction value below
-            frac_min = 0
-            nan_fraction_found=False
-            if abs(dE[ip])>0.:
-                frac_min = abs(self._ass_charge_limit / dE[ip])
-            for it in range(packet_fractions.shape[0]):
-                # If the associated fraction of this segment is nan, disregard this segment
-                if np.isnan(packet_fractions[it]):
-                    seg_flag[it]=False
-                    nan_fraction_found=True
-                    continue
-                if seg_dist[it] > self._ass_distance_limit:
-                    seg_flag[it]=False
-                    continue
-                seg_flag[it] = abs(packet_fractions[it]) > frac_min
+            ### Step 2. Claculate the fraction min threshold and ignore segments with a fraction value below
+            ### 2023-09-14 YC: I think frac_min should be allowed to be below 0 for the sake of induced current.
+            ###frac_min = 0
+            ##nan_fraction_found=False
+            ###if abs(dE[ip])>0.:
+            ###    frac_min = abs(self._ass_charge_limit / dE[ip])
+            ##for it in range(packet_fractions.shape[0]):
+            ##    # If the associated fraction of this segment is nan, disregard this segment
+            ##    if np.isnan(packet_fractions[it]):
+            ##        seg_flag[it]=False
+            ##        nan_fraction_found=True
+            ##        continue
+            ##    if seg_dist[it] > self._ass_distance_limit:
+            ##        seg_flag[it]=False
+            ##        continue
+            ##    #seg_flag[it] = abs(packet_fractions[it]) > frac_min
 
-            if nan_fraction_found:
-                print('    WARNING: found nan in fractions of a packet:', packet_fractions)
-                if self._log is not None:
-                    self._log['fraction_nan'][-1] += 1
-
-
-            # Check if none of segments is above the frac_min. If so, only use the shortest distant segment.
-            if seg_flag.sum()<1:
-                if verbose:
-                    print('[WARNING] All associated segment below threshold: packet')
-                    print('          Packet %d Charge %.3f' % (ip,dE[ip]), ['%.3f' % f for f in packet_fractions])
-                if not self._log is None:
-                    self._log['packet_badass'][-1] += 1            
-                it = np.argmin(seg_dist)
-                if verbose:
-                    print('[INFO] Registering the closest segment',packet_segments[it])
-                #print(ass_segments[ip])
-                #print(ass_fractions[ip])
-                #print(it)
-                #print(packet_fractions)
-                seg_idx = packet_segments[it]
-                seg = data.segments[seg_idx]
-                packet_edeps[it].dedx = seg['dEdx']
-                packet_edeps[it].e = dE[ip]
-                supera_event[self._trackid2idx[int(seg['trackID'])]].pcloud.push_back(packet_edeps[it])
-                check_ana_sum += packet_edeps[it].e
-                continue
+            ##if nan_fraction_found:
+            ##    print('    WARNING: found nan in fractions of a packet:', packet_fractions)
+            ##    if self._log is not None:
+            ##        self._log['fraction_nan'][-1] += 1
 
 
-            # Step 3: re-normalize the fraction among remaining segments and create EDeps
-            frac_norm = 1. / (np.abs(packet_fractions[seg_flag]).sum())
-            for it in range(packet_fractions.shape[0]):
-                if not seg_flag[it]: continue
-                seg_idx = packet_segments[it]
-                seg = data.segments[seg_idx]
-                packet_edeps[it].dedx = seg['dEdx']
-                packet_edeps[it].e = dE[ip] * abs(packet_fractions[it]) * frac_norm
-                supera_event[self._trackid2idx[int(seg['trackID'])]].pcloud.push_back(packet_edeps[it])
-                if verbose:
-                    print('[INFO] Registered segment',seg_idx)
-                check_ana_sum += packet_edeps[it].e
+            ### Check if none of segments is above the frac_min. If so, only use the shortest distant segment.
+            ##print("seg_flag: ", seg_flag)
+            ##if seg_flag.sum()<1:
+            ##    if verbose:
+            ##        print('[WARNING] All associated segment below threshold: packet')
+            ##        print('          Packet %d Charge %.3f' % (ip,dE[ip]), ['%.3f' % f for f in packet_fractions])
+            ##    if not self._log is None:
+            ##        self._log['packet_badass'][-1] += 1            
+            ##    it = np.argmin(seg_dist)
+            ##    if verbose:
+            ##        print('[INFO] Registering the closest segment',packet_segments[it])
+            ##    #print(ass_segments[ip])
+            ##    #print(ass_fractions[ip])
+            ##    #print(it)
+            ##    #print(packet_fractions)
+            ##    seg_idx = packet_segments[it]
+            ##    seg = data.segments[seg_idx]
+            ##    packet_edeps[it].dedx = seg['dEdx']
+            ##    packet_edeps[it].e = dE[ip]
+            ##    supera_event[self._trackid2idx[int(seg['traj_id'])]].pcloud.push_back(packet_edeps[it])
+            ##    check_ana_sum += packet_edeps[it].e
+            ##    continue
+
+
+            ### Step 3: re-normalize the fraction among remaining segments and create EDeps
+            ### 2023-09-04 YC: Why do we need to renormalize here? (But it seems if you don't do it, the offset would be large, of the scale of ~20)
+            ##frac_norm = 1. / (np.abs(packet_fractions[seg_flag]).sum())
+            ###frac_norm = 1. 
+            ##for it in range(packet_fractions.shape[0]):
+            ##    if not seg_flag[it]: continue
+            ##    seg_idx = packet_segments[it]
+            ##    seg = data.segments[seg_idx]
+            ##    packet_edeps[it].dedx = seg['dEdx']
+            ##    packet_edeps[it].e = dE[ip] * abs(packet_fractions[it]) * frac_norm
+            ##    supera_event[self._trackid2idx[int(seg['traj_id'])]].pcloud.push_back(packet_edeps[it])
+            ##    if verbose:
+            ##        print('[INFO] Registered segment',seg_idx)
+            ##    check_ana_sum += packet_edeps[it].e
 
         if verbose:
             print("--- filling edep %s seconds ---" % (time.time() - start_time)) 
@@ -455,10 +467,10 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
             #if self._log['bad_track_id'][-1]:
             #    print(f'    WARNING: {self._log["bad_track_id"][-1]} invalid track IDs found in the association')
 
-        if abs(check_raw_sum - check_ana_sum)>0.1:
-            print('[WARNING] large disagreement in the sum packet values:')
-            print('    Raw sum:',check_raw_sum)
-            print('    Accounted sum:',check_ana_sum)
+        ##if abs(check_raw_sum - check_ana_sum)>0.1:
+        ##    print('[WARNING] large disagreement in the sum packet values:')
+        ##    print('    Raw sum:',check_raw_sum)
+        ##    print('    Accounted sum:',check_ana_sum)
         supera_event.unassociated_edeps = self._edeps_unassociated
         return supera_event
 
@@ -467,10 +479,10 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
         # Larnd-sim stores a lot of these fields as numpy.uint32, 
         # but Supera/LArCV want a regular int, hence the type casting
         # TODO Is there a cleaner way to handle this?
-        p.id             = int(trajectory['eventID'])
-        #p.interaction_id = trajectory['interactionID']
-        p.trackid        = int(trajectory['trackID'])
-        p.pdg            = int(trajectory['pdgId'])
+        p.id             = int(trajectory['event_id'])
+        p.interaction_id = int(trajectory['vertex_id'])   # this is the VertexID assigned at edep-sim stage
+        p.trackid        = int(trajectory['traj_id'])
+        p.pdg            = int(trajectory['pdg_id'])
         p.px = trajectory['pxyz_start'][0] 
         p.py = trajectory['pxyz_start'][1] 
         p.pz = trajectory['pxyz_start'][2]
@@ -486,11 +498,11 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
                                  trajectory['t_end']
         )
 
-        traj_parent_id = trajectory['parentID']
+        traj_parent_id = trajectory['parent_id']
         # This now causes errors?
         #if traj_parent_id == -1: p.parent_trackid = supera.kINVALID_TRACKID
         if traj_parent_id == -1: p.parent_trackid = p.trackid
-        else:                    p.parent_trackid = int(trajectory['parentID'])
+        else:                    p.parent_trackid = int(trajectory['parent_id'])
 
         if supera.kINVALID_TRACKID in [p.trackid, p.parent_trackid]:
             print('Unexpected to have an invalid track ID',p.trackid,
@@ -553,10 +565,10 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
                     else:
                         print("    WARNING: UNEXPECTED CASE for IONIZATION ")
                         print("      PDG",pdg_code,
-                              "TrackId",edepsim_part['trackID'],
+                              "TrackId",edepsim_part['traj_id'],
                               "Kinetic Energy",ke,
                               "Parent PDG",supera_part.parent_pdg ,
-                              "Parent TrackId",edepsim_part['parentID'],
+                              "Parent TrackId",edepsim_part['parent_id'],
                               "G4ProcessType",g4type_main ,
                               "SubProcessType",g4type_sub)
                         supera_part.type = supera.kIonization
@@ -565,10 +577,10 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
                 else:
                     print("    WARNING: UNEXPECTED EM SubType ")
                     print("      PDG",pdg_code,
-                          "TrackId",edepsim_part['trackID'],
+                          "TrackId",edepsim_part['traj_id'],
                           "Kinetic Energy",ke,
                           "Parent PDG",supera_part.parent_pdg ,
-                          "Parent TrackId",edepsim_part['parentID'],
+                          "Parent TrackId",edepsim_part['parent_id'],
                           "G4ProcessType",g4type_main ,
                           "SubProcessType",g4type_sub)
                     raise ValueError
@@ -593,10 +605,10 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
             else:
                 print("    WARNING: Guessing the shower type as", "Compton" if ke < self._electron_energy_threshold else "OtherShower")
                 print("      PDG",pdg_code,
-                      "TrackId",edepsim_part['trackID'],
+                      "TrackId",edepsim_part['traj_id'],
                       "Kinetic Energy",ke,
                       "Parent PDG",supera_part.parent_pdg ,
-                      "Parent TrackId",edepsim_part['parentID'],
+                      "Parent TrackId",edepsim_part['parent_id'],
                       "G4ProcessType",g4type_main ,
                       "SubProcessType",g4type_sub)
 

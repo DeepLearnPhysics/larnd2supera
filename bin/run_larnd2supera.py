@@ -14,8 +14,10 @@ parser.add_option("-n", "--num_events", dest="num_events", metavar="INT", defaul
 parser.add_option("-s", "--skip", dest="skip", metavar="INT", default=0,
     help="number of first events to skip")
 parser.add_option("-b", action="store_true", dest="ignore_bad_association", default=False)
+parser.add_option("-v", action="store_true", dest="verbose", default=False)
 parser.add_option("-l", "--log", dest="log_file", metavar="FILE", default='',
     help="the name of a log file to be created. ")
+parser.add_option("-p", action="store_true", dest="beam", default=False, help="if it is NUMI beam")
 
 (data, args) = parser.parse_args()
 
@@ -58,4 +60,5 @@ larnd2supera.utils.run_supera(out_file=data.output_filename,
     num_skip=int(data.skip),
     ignore_bad_association=bool(data.ignore_bad_association),
     save_log=data.log_file,
-    )
+    verbose=bool(data.verbose),
+    if_beam=bool(data.beam))

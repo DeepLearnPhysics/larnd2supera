@@ -1,0 +1,38 @@
+# ===============
+# 2x2.yaml
+# ===============
+
+LogLevel:        INFO
+EventSeparator:  'event_id'
+ActiveDetectors: ["TPCActive_shape"]
+MaxSegmentSize:  0.03
+PropertyKeyword: '2x2_MR4'
+TileLayout: ''
+DetectorProperties: ''
+ParserRunConfig:
+    event_separator: 'event_id'
+ElectronEnergyThreshold: 5
+
+BBoxAlgorithm: BBoxInteraction
+BBoxConfig:
+    LogLevel:   WARNING
+    Seed:       -1
+    BBoxSize:   [141.888,127.6992,141.888]
+    BBoxTop:    [70.944,-204.1504,1370.944]  
+    BBoxBottom: [-70.944,-331.8496,1229.056] 
+    VoxelSize:  [0.4434,0.4434,0.4434]
+    #WorldBoundMax: [-1.e20,-1.e20,-1.e20]
+    #WorldBoundMin: [ 1.e20, 1.e20, 1.e20]
+
+LabelAlgorithm: LArTPCMLReco3D
+LabelConfig:
+    LogLevel: WARNING
+    DeltaSize:     3
+    ComptonSize:  10
+    LEScatterSize: 2
+    TouchDistance: 1
+    StoreLEScatter:   True
+    SemanticPriority: [1,0,2,3,4]
+    EnergyDepositThreshold: 0.0
+    #WorldBoundMax: [-1.e20,-1.e20,-1.e20]
+    #WorldBoundMin: [ 1.e20, 1.e20, 1.e20]
