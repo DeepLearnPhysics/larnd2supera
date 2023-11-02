@@ -7,11 +7,15 @@ EventSeparator:  'spillID'
 ActiveDetectors: ["TPCActive_shape"]
 MaxSegmentSize:  0.03
 PropertyKeyword: '2x2'
-TileLayout: ''
 DetectorProperties: ''
+ElectronEnergyThreshold: 5
+AssDistanceLimit: 1.9953
+AssChargeLimit: 0.05
+SearchAssociation: True
+
+TileLayout: ''
 ParserRunConfig:
     event_separator: 'eventID'
-ElectronEnergyThreshold: 5
 
 BBoxAlgorithm: BBoxInteraction
 BBoxConfig:
@@ -28,7 +32,7 @@ LabelAlgorithm: LArTPCMLReco3D
 LabelConfig:
     LogLevel: WARNING
     DeltaSize:     3
-    ComptonSize:  10
+    ComptonSize:   10
     LEScatterSize: 2
     TouchDistance: 1
     StoreLEScatter:   True

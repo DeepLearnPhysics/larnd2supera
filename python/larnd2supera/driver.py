@@ -31,8 +31,7 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
         self._ass_charge_limit=0.05
         self._log=None
         self._electron_energy_threshold=0
-        self._estimate_pt_time=True
-        self._ignore_bad_association=True
+        self._search_association=True
         print("Initialized SuperaDriver class")
 
 
@@ -101,13 +100,12 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
             self._electron_energy_threshold = cfg.get('ElectronEnergyThreshold',
                 self._electron_energy_threshold
                 )
-            self._estimate_pt_time = cfg.get('EstimatePointTime',
-                self._estimate_pt_time)
             self._ass_distance_limit = cfg.get('AssDistanceLimit',
                 self._ass_distance_limit)
             self._ass_charge_limit = cfg.get('AssChargeLimit',
                 self._ass_charge_limit)
-
+            self._search_association = cfg.get('SearchAssociation',
+                self._search_association)
         super().ConfigureFromFile(fname)
 
 
@@ -265,10 +263,6 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
             self._edeps_all.push_back(raw_edep)
             check_raw_sum += dE[ip]
 
-            # Log the valid packet count
-            if not self._log is None:
-                self._log['packet_ctr'][-1]+=1
-
             # We analyze and modify segments and fractions, so make a copy
             packet_segments  = np.array(ass_segments[ip])
             packet_fractions = np.array(ass_fractions[ip])
@@ -344,8 +338,6 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
                 edep = supera.EDep()
                 edep.x,edep.y,edep.z,edep.e = x[ip]*self._mm2cm, y[ip]*self._mm2cm, z[ip]*self._mm2cm, dE[ip]
                 self._edeps_unassociated.push_back(edep)
-                if not self._log is None:
-                    self._log['packet_noass'][-1] += 1
                 check_ana_sum += edep.e
                 continue
 
@@ -432,7 +424,53 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
                 check_ana_sum += packet_edeps[it].e
 
         if verbose:
-            print("--- filling edep %s seconds ---" % (time.time() - start_time)) 
+            print("--- filling edep %s seconds ---" % (time.time() - start_time))
+
+        print('Unassociated edeps',self._edeps_unassociated.size())
+        if self._search_association:
+            # Attempt to associate unassociated edeps
+            failed_unass = std.vector('supera::EDep')()
+            for iedep, edep in enumerate(self._edeps_unassociated):
+                #print('Searching for EDep',iedep,'/',self._edeps_unassociated.size())
+                ass_found=False
+                for seg in data.segments:
+                    seg_pt0.x, seg_pt0.y, seg_pt0.z = seg['x_start'], seg['y_start'], seg['z_start']
+                    seg_pt1.x, seg_pt1.y, seg_pt1.z = seg['x_end'], seg['y_end'], seg['z_end']
+                    packet_pt.x, packet_pt.y, packet_pt.z = edep.x, edep.y, edep.z
+
+                    edep_time = 0 
+                    if seg['t0_start'] < seg['t0_end']:
+                        time_frac = self.PoCA(seg_pt0,seg_pt1,packet_pt,scalar=True)
+                        edep_time = seg['t0_start'] + time_frac * (seg['t0_end'  ] - seg['t0_start'])
+                        poca_pt = seg_pt0 + (seg_pt1 - seg_pt0) * time_frac
+                    else:
+                        time_frac = self.PoCA(seg_pt1,seg_pt0,packet_pt,scalar=True)
+                        edep_time = seg['t0_end'  ] + time_frac * (seg['t0_start'] - seg['t0_end'  ])
+                        poca_pt = seg_pt1 + (seg_pt0 - seg_pt1) * time_frac
+
+                    seg_dist = poca_pt.distance(packet_pt)
+                    if seg_dist < self._ass_distance_limit:
+                        #associate
+                        edep.dedx = seg['dEdx']
+                        edep.t    = edep_time
+                        supera_event[self._trackid2idx[int(seg['trackID'])]].pcloud.push_back(edep)
+                        ass_found=True
+                        break
+                if not ass_found:
+                    failed_unass.push_back(edep)
+                    print(f'Found unassociated edep ({iedep}th) ... dE/dX={edep.dedx} total unassociated edep so far {self._edeps_unassociated.size()}')
+                #print('    Found so far:',failed_unass.size())
+            print('Clearing self._edeps_unassociated of size',self._edeps_unassociated.size())
+            self._edeps_unassociated.clear()
+            print('Size after clearing:',self._edeps_unassociated.size())
+            self._edeps_unassociated = failed_unass
+            print('New self._edeps_unassociated size',self._edeps_unassociated.size())
+
+        if not self._log is None:
+            self._log['packet_noass'][-1] = self._edeps_unassociated.size()
+            self._log['packet_ctr'][-1]   = (data.packets['packet_type'] == 0).sum()
+
+        print('Unassociated edeps',self._edeps_unassociated.size())
 
         if not self._log is None:
 
@@ -516,8 +554,11 @@ class SuperaDriver(edep2supera.edep2supera.SuperaDriver):
             dz = (supera_parent.end_pt.pos.z - supera_part.vtx.pos.z)
             dr = dx + dy + dz
         
-        if pdg_code == 2112 or pdg_code > 1000000000:
+        if pdg_code == 2112:
             supera_part.type = supera.kNeutron
+
+        elif pdg_code > 1000000000:
+            supera_part.type = supera.kNucleus
         
         elif supera_part.trackid == supera_part.parent_trackid:
             supera_part.type = supera.kPrimary
