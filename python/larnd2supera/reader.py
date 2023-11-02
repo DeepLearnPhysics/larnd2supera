@@ -71,7 +71,7 @@ class InputReader:
                 self._is_sim = 'mc_packets_assn' in fin.keys()
                 if self._is_sim:
                     mc_packets_assn.append(fin['mc_packets_assn'][:])
-                    segments.append(fin['segments'][:])
+                    segments.append(fin['tracks'][:])
                     trajectories.append(fin['trajectories'][:])
                     vertices.append(fin['vertices'][:])
                     if verbose: print('Read-in:',f)
@@ -87,7 +87,7 @@ class InputReader:
         self._vertices = np.concatenate(vertices)
         
         # create mapping
-        self._packet2event = EventParser.packet_to_eventid(self._mc_packets_assn, self._segments, self._run_config['event_separator'])
+        self._packet2event = EventParser.packet_to_eventid(self._mc_packets_assn, self._segments, self._vertices)
         
         packet_mask = self._packet2event != -1
         ctr_packet  = len(self._packets)
@@ -135,8 +135,8 @@ class InputReader:
     def CheckIntegrity(self,data,fix_association=False):
 
         flag = True
-        tid_range0 = np.array([t['traj_id'] for t in data.trajectories])
-        tid_range1 = np.array([s['traj_id'] for s in data.segments    ])
+        tid_range0 = np.array([t['trackID'] for t in data.trajectories])
+        tid_range1 = np.array([s['trackID'] for s in data.segments    ])
 
         if tid_range0.max() < tid_range1.max():
             print('[ERROR] Max Track ID in the segments exceeds the maximum of the trajectories')
@@ -183,7 +183,7 @@ class InputReader:
         return flag
 
 
-    def GetEntry(self,index,if_beam=False):
+    def GetEntry(self,index):
         
         if index >= len(self._event_ids):
             print('Entry',index,'is above allowed entry index (<%d)' % len(self._event_ids))
@@ -195,24 +195,13 @@ class InputReader:
 
         result.event_separator = self._run_config['event_separator']
         
-        # event_id has the size of non-empty readouts
         result.event_id = self._event_ids[index]
-        
-        # t0 has the size of (max-min+1) number of true event time padded
-        # use the event_id as the index
-        # FIXME 1000->maximum file event number, make it configurable
-        local_evt_id = result.event_id % 1000
-        result.t0 = self._event_t0s[local_evt_id]
+        result.t0 = self._event_t0s[result.event_id]
 
         mask = self._packet2event == result.event_id
         
         result.packets = self._packets[mask]
         result.mc_packets_assn = self._mc_packets_assn[mask]
-        # FIXME cheating for clock rollover 2**31
-        # for beam event, the spacing between events is 1.2E7 time ticks (0.1us per time tick)
-        # for particle bomb, the spacings between events are shorter. Usually if you run with <1000 events per file, you would not run into rollovers
-        if if_beam and local_evt_id > 178:
-            result.packets['timestamp'] = result.packets['timestamp'] + 2**31
         
         mask = self._segments[self._run_config['event_separator']] == result.event_id
         result.segments = self._segments[mask]
