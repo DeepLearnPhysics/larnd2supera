@@ -178,6 +178,11 @@ def run_supera(out_file='larcv.root',
             larp = larcv_particle(p)
             particle.append(larp)
 
+        trigger = writer.get_data("trigger", "base")
+        trigger.id(int(input_data.event_id))  # fixme: this will need to be different for real data?
+        trigger.time_s(int(input_data.t0))
+        trigger.time_ns(int(1e9 * (input_data.t0 - trigger.time_s())))
+
         # TODO fill the run ID 
         writer.set_id(0,0,int(input_data.event_id))
         writer.save_entry()
