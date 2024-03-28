@@ -1,0 +1,41 @@
+# ===============
+# 2x2_only.yaml
+# ===============
+
+LogLevel:        WARNING
+EventSeparator:  'event_id'
+ActiveDetectors: ["TPCActive_shape"]
+#MaxSegmentSize:  0.03
+PropertyKeyword: '2x2_only'
+TileLayout: ''
+DetectorProperties: ''
+ParserRunConfig:
+    event_separator: 'event_id'
+ElectronEnergyThreshold: 5
+AssDistanceLimit: 20. #1.9953 # 0.4434*4.5
+AssChargeLimit: 0.05 # MeV
+SearchAssociation: True
+
+BBoxAlgorithm: BBoxInteraction
+BBoxConfig:
+    LogLevel:   WARNING
+    Seed:       -1
+    BBoxSize:   [141.888,127.6992,141.888]
+    BBoxTop:    [70.944,105.8496,70.944]
+    BBoxBottom: [-70.944,-21.8496,-70.944]
+    VoxelSize:  [0.4434,0.4434,0.4434]
+    #WorldBoundMax: [-1.e20,-1.e20,-1.e20]
+    #WorldBoundMin: [ 1.e20, 1.e20, 1.e20]
+
+LabelAlgorithm: LArTPCMLReco3D
+LabelConfig:
+    LogLevel: WARNING
+    DeltaSize:     3
+    ComptonSize:  10
+    LEScatterSize: 2
+    TouchDistance: 1
+    StoreLEScatter:   True
+    SemanticPriority: [1,0,2,3,4]
+    EnergyDepositThreshold: 0.0
+    #WorldBoundMax: [-1.e20,-1.e20,-1.e20]
+    #WorldBoundMin: [ 1.e20, 1.e20, 1.e20]

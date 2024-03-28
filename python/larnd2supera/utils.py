@@ -46,6 +46,7 @@ def log_supera_integrity_check(data,driver,log,verbose=False):
     energy_num = label._energies.size()
     pcloud_sum = np.sum(pcloud[:,3])
     pcloud_num = pcloud.shape[0]
+    print("voxel.shape: ", voxels.shape)
     voxels_sum = np.sum(voxels[:,3])
     voxels_num = voxels.shape[0]
     unass_sum  = np.sum([vox.value() for vox in label._unassociated_voxels.as_vector()])
@@ -81,7 +82,9 @@ def run_supera(out_file='larcv.root',
                num_events=-1,
                num_skip=0,
                ignore_bad_association=True,
-               save_log=None):
+               save_log=None,
+               verbose=False,
+               if_beam=False):
 
     start_time = time.time()
 
@@ -124,7 +127,7 @@ def run_supera(out_file='larcv.root',
         print(f'Processing Entry {entry}')
 
         t0 = time.time()
-        input_data = reader.GetEntry(entry)
+        input_data = reader.GetEntry(entry,if_beam)
         is_good_event = reader.CheckIntegrity(input_data,ignore_bad_association)
         if not is_good_event:
             print('[ERROR] Skipping the entry')
